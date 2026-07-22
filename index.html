@@ -3570,6 +3570,47 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
             if (display) display.textContent = `${h} ชม. ${m} น.`;
         }
 
+        // ── ตรวจสอบว่าทุกแถวที่มีข้อมูล ต้องเลือก "หัวข้อ" และพิมพ์ "รายละเอียด" ให้ครบ ──
+        function validateTaskRows(rowIds) {
+            // ล้าง highlight สีแดงเก่าทั้งหมดก่อนตรวจใหม่
+            rowIds.forEach(i => {
+                const det = document.getElementById(`detail-text-${i}`);
+                if (det) det.classList.remove('border-red-400', 'bg-red-50');
+                const topWrap = document.getElementById(`topic-select-table-${i}`)?.closest('.ss-wrapper');
+                const topInput = topWrap ? topWrap.querySelector('.ss-input') : null;
+                if (topInput) topInput.classList.remove('border-red-400', 'bg-red-50');
+            });
+
+            for (const i of rowIds) {
+                const det = document.getElementById(`detail-text-${i}`);
+                const top = document.getElementById(`topic-select-table-${i}`);
+                const req = document.getElementById(`requester-select-table-${i}`);
+                const agt = document.getElementById(`agent-select-table-${i}`);
+                const sta = document.getElementById(`status-select-table-${i}`);
+                const con = document.getElementById(`consultant-text-${i}`);
+                const hasAnyData = (det && det.value.trim()) || (req && req.value) || (agt && agt.value) || (top && top.value) || (sta && sta.value) || (con && con.value.trim());
+                if (!hasAnyData) continue; // แถวว่างสนิท ไม่ต้องบังคับ
+
+                const missingTopic  = !(top && top.value);
+                const missingDetail = !(det && det.value.trim());
+
+                if (missingTopic || missingDetail) {
+                    if (missingTopic) {
+                        const topWrap = top ? top.closest('.ss-wrapper') : null;
+                        const topInput = topWrap ? topWrap.querySelector('.ss-input') : null;
+                        if (topInput) topInput.classList.add('border-red-400', 'bg-red-50');
+                    }
+                    if (missingDetail && det) det.classList.add('border-red-400', 'bg-red-50');
+
+                    const card = document.getElementById(`log-card-${i}`);
+                    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    return { valid: false, rowIndex: i, missingTopic, missingDetail };
+                }
+            }
+            return { valid: true };
+        }
+
         async function handleSubmit(e) { 
             e.preventDefault(); 
             const dateVal = document.getElementById('date').value;
@@ -3601,6 +3642,20 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
                     }); 
                 } 
             }); 
+            // ── บังคับว่าทุกแถวที่มีข้อมูลต้องเลือกหัวข้อ + พิมพ์รายละเอียดให้ครบก่อนส่ง ──
+            const _rowIdsForValidation = [];
+            document.querySelectorAll('#log-table-body tr').forEach(r => {
+                if (!_isEditing && r.dataset.isSubmitted === 'true') return;
+                _rowIdsForValidation.push(r.id.split('-').pop());
+            });
+            const _validation = validateTaskRows(_rowIdsForValidation);
+            if (!_validation.valid) {
+                const missMsg = [];
+                if (_validation.missingTopic)  missMsg.push('เลือก "หัวข้อ"');
+                if (_validation.missingDetail) missMsg.push('พิมพ์ "รายละเอียด"');
+                return showMessage(`กรุณา${missMsg.join(' และ ')} ให้ครบในรายการที่ ${_validation.rowIndex} ก่อนบันทึก`, 'error');
+            }
+
             const leaveCat = document.getElementById('leave_category').value;
             const leaveType = document.getElementById('leave_type').value;
             const d={ date:document.getElementById('date').value, employee:LOGGED_IN_USER, employeeId:LOGGED_IN_USER_ID, tasks:t, notes:document.getElementById('notes').value, substituteWorker:document.getElementById('substitute_worker').value, leaveType: leaveCat || leaveType , leaveCategory: leaveType , leaveHoursAmt: document.getElementById('leave_hours_amt').value, leaveCheckbox: document.getElementById('leave_type').value ? 'Yes' : 'No', leaveDetails:document.getElementById('leave_details').value, trainingCheckbox:document.getElementById('training_checkbox').checked?'Yes':'No', trainingDetails:document.getElementById('training_details').value, fieldworkCheckbox:document.getElementById('fieldwork_checkbox').checked?'Yes':'No', fieldworkDetails:document.getElementById('fieldwork_details').value, isDraft:false }; 
@@ -3683,6 +3738,20 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
                     }); 
                 } 
             }); 
+
+            // ── บังคับว่าทุกแถวที่มีข้อมูลต้องเลือกหัวข้อ + พิมพ์รายละเอียดให้ครบก่อนบันทึกร่าง ──
+            const _draftRowIds = [];
+            document.querySelectorAll('#log-table-body tr').forEach(r => {
+                if (r.dataset.isSubmitted === 'true') return;
+                _draftRowIds.push(r.id.split('-').pop());
+            });
+            const _draftValidation = validateTaskRows(_draftRowIds);
+            if (!_draftValidation.valid) {
+                const missMsg = [];
+                if (_draftValidation.missingTopic)  missMsg.push('เลือก "หัวข้อ"');
+                if (_draftValidation.missingDetail) missMsg.push('พิมพ์ "รายละเอียด"');
+                return showMessage(`กรุณา${missMsg.join(' และ ')} ให้ครบในรายการที่ ${_draftValidation.rowIndex} ก่อนบันทึกร่าง`, 'error');
+            }
 
             const d={ 
                 date:document.getElementById('date').value, 
@@ -4722,15 +4791,26 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
             // ── กรณีแก้ไขรายการที่ส่งแล้ว: ส่งไป server ──────────────
             toggleLoading(true, 'กำลังบันทึกการแก้ไข...');
             try {
-                const [res] = await Promise.all([
-                    fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify(d)}),
-                    fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify({action:'delete', id:editId})})
-                ]);
+                // ── 1) บันทึกข้อมูลใหม่ก่อน แล้ว "รอ" ให้เสร็จจริงๆ ──
+                const res = await fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify(d)});
                 const result = await res.json();
-                if (result.result !== 'success') throw new Error('Server Error');
+                if (result.result !== 'success') throw new Error(result.message || 'Server Error');
+                const newId = result.id || ('local_' + Date.now());
 
-                // ลงทะเบียน editId ใน _recentlyDeletedIds เพื่อให้ fetchHistoryFromServer กรองออกเสมอ
-                // เพิ่มทั้ง raw value และ String เพื่อป้องกัน type mismatch (number vs string)
+                // ── 2) บันทึกสำเร็จแน่นอนแล้ว ค่อยลบของเก่า (ไม่ยิงพร้อมกันอีกต่อไป) ──
+                let deleteOk = false;
+                for (let attempt = 0; attempt < 2 && !deleteOk; attempt++) {
+                    try {
+                        const delRes = await fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify({action:'delete', id:editId})});
+                        const delResult = await delRes.json();
+                        deleteOk = (delResult.result === 'deleted');
+                    } catch(eDel) { /* ลองใหม่รอบถัดไป */ }
+                }
+                if (!deleteOk) {
+                    console.warn('ลบรายการเดิม (id=' + editId + ') ไม่สำเร็จ — อาจมีข้อมูลซ้ำ กรุณาตรวจสอบ');
+                }
+
+                // ลงทะเบียน editId กันไม่ให้ fetchHistoryFromServer ดึงรายการเก่ากลับมาแสดงซ้ำ
                 if (!window._recentlyDeletedIds) window._recentlyDeletedIds = new Set();
                 window._recentlyDeletedIds.add(editId);
                 window._recentlyDeletedIds.add(String(editId));
@@ -4739,7 +4819,7 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
                 try { const uaMap=JSON.parse(localStorage.getItem(UPDATED_AT_MAP_KEY)||'{}'); uaMap[LOGGED_IN_USER+'|'+editDs]=new Date().toISOString(); localStorage.setItem(UPDATED_AT_MAP_KEY, JSON.stringify(uaMap)); } catch(e2){}
 
                 // Optimistic update
-                const optimistic = Object.assign({}, d, {id:(result.id||'local_'+Date.now())});
+                const optimistic = Object.assign({}, d, {id: newId});
                 SERVER_HISTORY_DB = SERVER_HISTORY_DB.filter(x => String(x.id) !== String(editId));
                 SERVER_HISTORY_DB.push(optimistic);
 
@@ -4758,7 +4838,7 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
                 toggleLoading(false);
                 showMessage('✅ แก้ไขข้อมูลเรียบร้อยแล้ว', 'success');
                 // หน่วง server fetch เล็กน้อยให้ server บันทึกเสร็จก่อน
-                setTimeout(() => fetchHistoryFromServer(true), 2500);
+                fetchHistoryFromServer(true);
             } catch(e) {
                 toggleLoading(false);
                 showMessage('เกิดข้อผิดพลาด: ' + e.message, 'error');
@@ -4974,13 +5054,28 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
 
             toggleLoading(true, 'กำลังบันทึกการแก้ไข...');
             try {
-                await Promise.all([
-                    fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify(payload)}),
-                    fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify({action:'delete', id:editId})})
-                ]);
+                // ── 1) บันทึกข้อมูลใหม่ก่อน แล้วรอผลจริง ──
+                const res = await fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify(payload)});
+                const result = await res.json();
+                if (result.result !== 'success') throw new Error(result.message || 'Server Error');
+                const newId = result.id || ('local_' + Date.now());
+
+                // ── 2) ค่อยลบของเก่า (sequential ไม่ใช่ parallel) ──
+                let deleteOk = false;
+                for (let attempt = 0; attempt < 2 && !deleteOk; attempt++) {
+                    try {
+                        const delRes = await fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify({action:'delete', id:editId})});
+                        const delResult = await delRes.json();
+                        deleteOk = (delResult.result === 'deleted');
+                    } catch(eDel) { /* ลองใหม่รอบถัดไป */ }
+                }
+                if (!deleteOk) {
+                    console.warn('ลบรายการเดิม (id=' + editId + ') ไม่สำเร็จ — อาจมีข้อมูลซ้ำ กรุณาตรวจสอบ');
+                }
+
                 // Optimistic update
                 SERVER_HISTORY_DB = SERVER_HISTORY_DB.filter(x => String(x.id) !== String(editId));
-                SERVER_HISTORY_DB.push(Object.assign({}, payload, {id:'local_'+Date.now()}));
+                SERVER_HISTORY_DB.push(Object.assign({}, payload, {id: newId}));
                 try { const uaMap=JSON.parse(localStorage.getItem(UPDATED_AT_MAP_KEY)||'{}'); uaMap[LOGGED_IN_USER+'|'+editDs]=new Date().toISOString(); localStorage.setItem(UPDATED_AT_MAP_KEY, JSON.stringify(uaMap)); } catch(e2){}
                 if(IS_ADMIN){renderAdminCalendar();renderAdminMonthlyLogs();}else{renderCalendar();}
                 renderDayLogs(editDs);

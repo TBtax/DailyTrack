@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DailyTrack - Test_ </title>
+    <title>DailyTrack(v.3.0) </title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1953,7 +1953,7 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
     </div>
 
     <script>
-        const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxGzU8spqIUivYMvtbuN7ieoLnSucEbUtCUP98Oqp_2UQBfRrcHyDdU2-mB04FWxR8BIw/exec'; 
+        const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxe4h-bAXPZ_eik9uNAyXjbLvKJ2_ott3j5B3jrgJvHvSwRSjQVFFfbojMq-TmJKceRyg/exec'; 
         let LOGGED_IN_USER = null, LOGGED_IN_USER_ID = null, IS_ADMIN = false, IS_SUPERVISOR = false, IS_MANAGER = false, MY_SUBORDINATES = [], EMPLOYEE_DB = {}, SERVER_HISTORY_DB = [], currentCalendarDate = new Date(), currentAdminSelectedUser = 'All';
         const MIN_CALENDAR_DATE = new Date(2025, 10, 1); // พฤศจิกายน 2025 — เก่ากว่านี้ไม่ให้เลือก
         const DRAFT_STORAGE_KEY = 'dailytrack_draft_', SESSION_STORAGE_KEY = 'dailytrack_session', ROWS_TO_ADD_BATCH = 5, UPDATED_AT_MAP_KEY = 'dailytrack_updated_at_map';
@@ -3328,7 +3328,12 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
             }
 
             try {
-                const res = await fetch(`${WEBHOOK_URL}?action=getHistory&employee=${encodeURIComponent(LOGGED_IN_USER)}`);
+                // Admin / Manager / Supervisor ต้องเห็น log ของทุกคน เพื่อคำนวณ "บันทึกครบ/ยังไม่ครบ" ให้ถูกต้อง
+                const needsFullDataset = IS_ADMIN || IS_MANAGER || IS_SUPERVISOR;
+                const url = needsFullDataset
+                    ? `${WEBHOOK_URL}?action=getHistory`
+                    : `${WEBHOOK_URL}?action=getHistory&employee=${encodeURIComponent(LOGGED_IN_USER)}`;
+                const res = await fetch(url);
                 if (!res.ok) throw new Error(`Server error: ${res.status}`);
                 const d = await res.json();
                 SERVER_HISTORY_DB = window._recentlyDeletedIds && window._recentlyDeletedIds.size > 0
@@ -3614,6 +3619,10 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
         async function handleSubmit(e) { 
             e.preventDefault(); 
             const dateVal = document.getElementById('date').value;
+            // ★ บังคับให้เลือกวันที่ก่อนกดส่งข้อมูล เหมือนตอนบันทึกแบบร่าง
+            if (!dateVal) {
+                return showMessage('กรุณาเลือกวันที่ก่อนส่งข้อมูล', 'warning');
+            }
             const _isEditing = !!window.EDITING_LOG_ID;
             const t=[]; 
             

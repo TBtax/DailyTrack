@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DailyTrack(v.3.0) </title>
+    <title>DailyTrack_v.3.0 </title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1954,6 +1954,17 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
 
     <script>
         const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxe4h-bAXPZ_eik9uNAyXjbLvKJ2_ott3j5B3jrgJvHvSwRSjQVFFfbojMq-TmJKceRyg/exec'; 
+        // ── Safe fetch: กัน error "Unexpected token '<'" เวลา server ตอบ HTML แทน JSON ──
+        async function safeFetchJson(url, options) {
+            const res = await fetch(url, options);
+            const text = await res.text();
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('Non-JSON response from server:', text.substring(0, 300));
+                throw new Error('เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง (ถ้ายังไม่หาย ติดต่อผู้ดูแลระบบ)');
+            }
+        }
         let LOGGED_IN_USER = null, LOGGED_IN_USER_ID = null, IS_ADMIN = false, IS_SUPERVISOR = false, IS_MANAGER = false, MY_SUBORDINATES = [], EMPLOYEE_DB = {}, SERVER_HISTORY_DB = [], currentCalendarDate = new Date(), currentAdminSelectedUser = 'All';
         const MIN_CALENDAR_DATE = new Date(2025, 10, 1); // พฤศจิกายน 2025 — เก่ากว่านี้ไม่ให้เลือก
         const DRAFT_STORAGE_KEY = 'dailytrack_draft_', SESSION_STORAGE_KEY = 'dailytrack_session', ROWS_TO_ADD_BATCH = 5, UPDATED_AT_MAP_KEY = 'dailytrack_updated_at_map';
@@ -4783,13 +4794,11 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
 
             // ── กรณีแก้ไขแบบร่าง: บันทึกกลับ localStorage ──────────
             if (isSavingDraft) {
-                // ถ้าวันที่เปลี่ยน ให้ลบ draft เก่าออกก่อน แล้วบันทึกใหม่ที่วันใหม่
                 if (originalDs && originalDs !== editDs) {
                     deleteDraftForDate(originalDs);
                 }
                 saveDraftForDate(editDs, d);
                 renderCalendar();
-                // render วันเดิมก่อน (เคลียร์ให้ว่าง) แล้วค่อย render วันใหม่
                 if (originalDs && originalDs !== editDs) renderDayLogs(originalDs);
                 _historySelectedDay = editDs;
                 renderDayLogs(editDs);
@@ -4797,56 +4806,43 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
                 return;
             }
 
-            // ── กรณีแก้ไขรายการที่ส่งแล้ว: ส่งไป server ──────────────
+            // ── กรณีแก้ไขรายการที่ส่งแล้ว: ใช้ action 'editLog' (atomic — ลบเก่า+สร้างใหม่ในคำสั่งเดียว) ──
             toggleLoading(true, 'กำลังบันทึกการแก้ไข...');
             try {
-                // ── 1) บันทึกข้อมูลใหม่ก่อน แล้ว "รอ" ให้เสร็จจริงๆ ──
-                const res = await fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify(d)});
-                const result = await res.json();
+                const payload = Object.assign({}, d, {
+                    action: 'editLog',
+                    oldId: editId,
+                    originalDate: originalDs
+                });
+                const result = await safeFetchJson(WEBHOOK_URL, {method:'POST', body:JSON.stringify(payload)});
                 if (result.result !== 'success') throw new Error(result.message || 'Server Error');
+
                 const newId = result.id || ('local_' + Date.now());
-
-                // ── 2) บันทึกสำเร็จแน่นอนแล้ว ค่อยลบของเก่า (ไม่ยิงพร้อมกันอีกต่อไป) ──
-                let deleteOk = false;
-                for (let attempt = 0; attempt < 2 && !deleteOk; attempt++) {
-                    try {
-                        const delRes = await fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify({action:'delete', id:editId})});
-                        const delResult = await delRes.json();
-                        deleteOk = (delResult.result === 'deleted');
-                    } catch(eDel) { /* ลองใหม่รอบถัดไป */ }
-                }
-                if (!deleteOk) {
-                    console.warn('ลบรายการเดิม (id=' + editId + ') ไม่สำเร็จ — อาจมีข้อมูลซ้ำ กรุณาตรวจสอบ');
+                if (result.warning === 'old_row_not_found') {
+                    console.warn('⚠️ ไม่พบแถวเดิมให้ลบ (id=' + editId + ') — อาจมีข้อมูลซ้ำใน Sheet กรุณาตรวจสอบด้วยตนเอง');
                 }
 
-                // ลงทะเบียน editId กันไม่ให้ fetchHistoryFromServer ดึงรายการเก่ากลับมาแสดงซ้ำ
                 if (!window._recentlyDeletedIds) window._recentlyDeletedIds = new Set();
                 window._recentlyDeletedIds.add(editId);
                 window._recentlyDeletedIds.add(String(editId));
 
-                // Update updatedAt
                 try { const uaMap=JSON.parse(localStorage.getItem(UPDATED_AT_MAP_KEY)||'{}'); uaMap[LOGGED_IN_USER+'|'+editDs]=new Date().toISOString(); localStorage.setItem(UPDATED_AT_MAP_KEY, JSON.stringify(uaMap)); } catch(e2){}
 
-                // Optimistic update
                 const optimistic = Object.assign({}, d, {id: newId});
                 SERVER_HISTORY_DB = SERVER_HISTORY_DB.filter(x => String(x.id) !== String(editId));
                 SERVER_HISTORY_DB.push(optimistic);
 
-                // เก็บ optimistic record ไว้ merge กลับหาก server ยังไม่มีตอน re-fetch
                 window._pendingOptimisticRecord = optimistic;
                 window._pendingOptimisticId = optimistic.id;
 
-                // อัปเดต selected day ให้ตรงกับวันที่ (อาจถูกเปลี่ยน) เพื่อให้ re-render ถูก
                 const oldDsSubmitted = originalDs;
                 _historySelectedDay = editDs;
 
                 if(IS_ADMIN){renderAdminCalendar();renderAdminMonthlyLogs();}else{renderCalendar();}
-                // ถ้าวันที่เปลี่ยน ให้ render วันเดิมก่อน (เคลียร์ record ที่ย้ายออกไป)
                 if (oldDsSubmitted && oldDsSubmitted !== editDs) renderDayLogs(oldDsSubmitted);
                 renderDayLogs(editDs);
                 toggleLoading(false);
                 showMessage('✅ แก้ไขข้อมูลเรียบร้อยแล้ว', 'success');
-                // หน่วง server fetch เล็กน้อยให้ server บันทึกเสร็จก่อน
                 fetchHistoryFromServer(true);
             } catch(e) {
                 toggleLoading(false);
@@ -5063,26 +5059,19 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
 
             toggleLoading(true, 'กำลังบันทึกการแก้ไข...');
             try {
-                // ── 1) บันทึกข้อมูลใหม่ก่อน แล้วรอผลจริง ──
-                const res = await fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify(payload)});
-                const result = await res.json();
+                const finalPayload = Object.assign({}, payload, {
+                    action: 'editLog',
+                    oldId: editId,
+                    originalDate: editDs
+                });
+                const result = await safeFetchJson(WEBHOOK_URL, {method:'POST', body:JSON.stringify(finalPayload)});
                 if (result.result !== 'success') throw new Error(result.message || 'Server Error');
+
                 const newId = result.id || ('local_' + Date.now());
-
-                // ── 2) ค่อยลบของเก่า (sequential ไม่ใช่ parallel) ──
-                let deleteOk = false;
-                for (let attempt = 0; attempt < 2 && !deleteOk; attempt++) {
-                    try {
-                        const delRes = await fetch(WEBHOOK_URL, {method:'POST', body:JSON.stringify({action:'delete', id:editId})});
-                        const delResult = await delRes.json();
-                        deleteOk = (delResult.result === 'deleted');
-                    } catch(eDel) { /* ลองใหม่รอบถัดไป */ }
-                }
-                if (!deleteOk) {
-                    console.warn('ลบรายการเดิม (id=' + editId + ') ไม่สำเร็จ — อาจมีข้อมูลซ้ำ กรุณาตรวจสอบ');
+                if (result.warning === 'old_row_not_found') {
+                    console.warn('⚠️ ไม่พบแถวเดิมให้ลบ (id=' + editId + ') — อาจมีข้อมูลซ้ำใน Sheet กรุณาตรวจสอบด้วยตนเอง');
                 }
 
-                // Optimistic update
                 SERVER_HISTORY_DB = SERVER_HISTORY_DB.filter(x => String(x.id) !== String(editId));
                 SERVER_HISTORY_DB.push(Object.assign({}, payload, {id: newId}));
                 try { const uaMap=JSON.parse(localStorage.getItem(UPDATED_AT_MAP_KEY)||'{}'); uaMap[LOGGED_IN_USER+'|'+editDs]=new Date().toISOString(); localStorage.setItem(UPDATED_AT_MAP_KEY, JSON.stringify(uaMap)); } catch(e2){}
@@ -5095,6 +5084,7 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
                 toggleLoading(false);
                 showMessage('เกิดข้อผิดพลาด: ' + e.message, 'error');
             }
+        
         }
 
         async function confirmDeleteLog(id, ds) {

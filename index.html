@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DailyTrack V.3.0 </title>
+    <title>DailyTrack - Test_ </title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -4072,7 +4072,7 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
             const updatedAtForDay = uaMap[LOGGED_IN_USER+'|'+ds] || null;
             if (logs.length === 0) {
                 if (isHoliday) { const holidayTitle = holidayName ? holidayName : "วันหยุดประจำสัปดาห์"; container.innerHTML = `<div class="text-center py-10 flex flex-col items-center justify-center h-full"><div class="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4 text-4xl shadow-sm">🏖️</div><h3 class="text-2xl font-bold text-gray-700">${holidayTitle}</h3><p class="text-gray-400 mt-2">วันหยุดทั้งที...พักผ่อนให้เต็มที่นะคะ !</p></div>`; }
-                else { container.innerHTML = `<div class="text-center text-gray-400 py-10 flex flex-col items-center"><span class="text-4xl mb-2">🤷‍♀️</span><p>ไม่พบข้อมูลการบันทึกในวันนี้</p><button onclick="hideModal('historyModal'); document.getElementById('date').value='${ds}'; checkDateStatus('${ds}'); loadDraftOrPreviousLog('${ds}')" class="mt-4 text-primary font-bold hover:underline">คลิกเพื่อบันทึกงานวันนี้</button></div>`; }
+                else { container.innerHTML = `<div class="text-center text-gray-400 py-10 flex flex-col items-center"><span class="text-4xl mb-2">🤷‍♀️</span><p>ไม่พบข้อมูลการบันทึกในวันนี้</p><button onclick="hideModal('historyModal'); switchView('log'); document.getElementById('date').value='${ds}'; checkDateStatus('${ds}'); loadDraftOrPreviousLog('${ds}')" class="mt-4 text-primary font-bold hover:underline">คลิกเพื่อบันทึกงานวันนี้</button></div>`; }
                 return;
             }
             let totalDayMins = 0;
@@ -4136,30 +4136,66 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
                     }
                     return; // ข้ามการ render แบบเดิม
                 }
-                // ---- SUBMITTED: render แบบเดิม (ทุก task ใน 1 card) ----
-                const d = document.createElement('div');
-                d.className = `p-6 rounded-2xl shadow-sm border transition hover:shadow-md bg-green-50 border-green-200 mb-8`;
-                let headerHtml = `<div class="flex justify-between items-center mb-4 border-b border-green-200 pb-3"><div class="flex items-center gap-2 flex-wrap"><span class="bg-success text-white text-xs px-3 py-1 rounded-lg font-bold shadow-sm">✅ บันทึกแล้ว</span><span class="text-[10px] text-gray-500">${i.timestamp ? new Date(i.timestamp).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : ''}</span>${updatedAtForDay ? `<span class="text-[10px] text-blue-500 font-semibold">(แก้ไขล่าสุด: ${new Date(updatedAtForDay).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'numeric'})} ${new Date(updatedAtForDay).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})})</span>` : ''}</div><div class="flex gap-2"><button onclick="editSubmittedLog(${logIdx}, '${ds}', true)" class="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg border transition" style="color:#4DA866;background:rgba(255,255,255,0.5);border-color:rgba(77,168,102,0.2);" onmouseover="this.style.background='#4DA866';this.style.color='white';this.style.borderColor='#4DA866';" onmouseout="this.style.background='rgba(255,255,255,0.5)';this.style.color='#4DA866';this.style.borderColor='rgba(77,168,102,0.2)';"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>แก้ไข</button><button onclick="confirmDeleteLog('${i.id}', '${ds}')" class="flex items-center gap-1 text-red-400 hover:text-red-600 hover:bg-red-50 text-xs font-bold px-3 py-1.5 bg-white/50 rounded-lg border border-red-100 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>ลบรายการ</button></div></div>`;
-                let contentHtml = '';
+                // ---- SUBMITTED: แยกแต่ละ task เป็นกล่องของตัวเอง ----
                 if (i.tasks && i.tasks.length > 0) {
-                    contentHtml += '<ul class="text-sm space-y-3 mb-4">';
                     i.tasks.forEach((t, tIdx) => {
+                        const card = document.createElement('div');
+                        card.className = "p-6 rounded-2xl shadow-sm border border-green-200 bg-green-50 hover:shadow-md transition mb-4";
                         const h = parseInt(t.durationHours || 0), m = parseInt(t.durationMinutes || 0);
                         const timeStr = (h > 0 || m > 0) ? h + ' ชม. ' + m + ' น.' : '0 ชม. 0 น.';
                         const statusClass = t.status === 'เสร็จสิ้น' ? 'text-green-600' : (t.status === 'ดำเนินการ' ? 'text-blue-600' : 'text-gray-700');
-                        contentHtml += `<li class="relative pl-4 border-l-2 border-green-300 mb-2"><div class="flex justify-between items-start text-xs mb-1.5"><div class="text-gray-400">ผู้แจ้งงาน: <span class="font-semibold text-gray-700">${t.requester||'-'}</span></div><div class="flex items-center gap-2 flex-shrink-0 pl-2"><span class="text-gray-400 font-semibold">⏱️ ${timeStr}</span></div></div><div class="text-xs mb-1 text-gray-400">Agent: <span class="font-semibold text-green-600">${t.agent||'-'}</span></div><div class="text-xs mb-1 text-gray-400">หัวข้อ: <span class="font-bold text-gray-800">${t.topic}</span></div><div class="text-xs mb-2 text-gray-400">สถานะ: <span class="font-bold ${statusClass}">${t.status||'-'}</span></div><div class="text-xs mb-1"><span class="font-semibold text-gray-500">รายละเอียด:</span><div class="bg-white rounded-xl px-3 py-2 mt-1 whitespace-pre-wrap text-gray-800 border border-gray-100 shadow-sm text-xs">${t.detail||'-'}</div></div>${t.problem?`<div class="text-xs mt-2"><span class="font-semibold text-red-500">⚠️ ปัญหา:</span><div class="bg-red-50 rounded-xl px-3 py-2 mt-1 whitespace-pre-wrap text-red-700 border border-red-100 shadow-sm text-xs">${t.problem}</div></div>`:''}</li>`;
+                        const taskLabel = i.tasks.length > 1 ? `<span class="text-[10px] text-green-600 bg-green-100 px-2 py-0.5 rounded-full font-bold">รายการที่ ${tIdx+1}/${i.tasks.length}</span>` : "";
+                        card.innerHTML = `
+                            <div class="flex justify-between items-center mb-3 border-b border-green-200 pb-3">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="bg-success text-white text-xs px-3 py-1 rounded-lg font-bold shadow-sm">✅ บันทึกแล้ว</span>
+                                    <span class="text-[10px] text-gray-500">${i.timestamp ? new Date(i.timestamp).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : ''}</span>
+                                    ${updatedAtForDay ? `<span class="text-[10px] text-blue-500 font-semibold">(แก้ไขล่าสุด: ${new Date(updatedAtForDay).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'numeric'})} ${new Date(updatedAtForDay).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})})</span>` : ''}
+                                    ${taskLabel}
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="editSubmittedLogTask(${logIdx}, '${ds}', ${tIdx})" class="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg border transition" style="color:#4DA866;background:white;border-color:rgba(77,168,102,0.2);" onmouseover="this.style.background='#4DA866';this.style.color='white';this.style.borderColor='#4DA866';" onmouseout="this.style.background='white';this.style.color='#4DA866';this.style.borderColor='rgba(77,168,102,0.2)';"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>แก้ไข</button>
+                                    <button onclick="deleteSingleSubmittedTask(${logIdx}, '${ds}', ${tIdx})" class="flex items-center gap-1 text-red-400 hover:text-red-600 hover:bg-red-50 text-xs font-bold px-3 py-1.5 bg-white/50 rounded-lg border border-red-100 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>ลบ</button>
+                                </div>
+                            </div>
+                            <div class="text-sm space-y-1">
+                                <div class="flex justify-between items-start">
+                                    <div class="text-gray-400 text-xs">${t.requester ? 'ผู้แจ้งงาน: <span class="font-semibold text-gray-700">' + t.requester + '</span>' : ''}</div>
+                                    <div class="text-gray-400 font-semibold text-xs">⏱️ ${timeStr}</div>
+                                </div>
+                                <div class="text-xs mb-1 text-gray-400">Agent: <span class="font-semibold text-green-600">${t.agent||'-'}</span></div>
+                                <div class="text-xs mb-1 text-gray-400">หัวข้อ: <span class="font-bold text-gray-800">${t.topic||'-'}</span></div>
+                                <div class="text-xs mb-2 text-gray-400">สถานะ: <span class="font-bold ${statusClass}">${t.status||'-'}</span></div>
+                                <div class="text-xs mb-1"><span class="font-semibold text-gray-500">รายละเอียด:</span><div class="bg-white rounded-xl px-3 py-2 mt-1 whitespace-pre-wrap text-gray-800 border border-gray-100 shadow-sm text-xs">${t.detail||'-'}</div></div>
+                                ${t.problem ? `<div class="text-xs mt-2"><span class="font-semibold text-red-500">⚠️ ปัญหา:</span><div class="bg-red-50 rounded-xl px-3 py-2 mt-1 whitespace-pre-wrap text-red-700 border border-red-100 shadow-sm text-xs">${t.problem}</div></div>` : ''}
+                            </div>`;
+                        container.appendChild(card);
                     });
-                    contentHtml += '</ul>';
                 }
+                // กล่องแยกสำหรับข้อมูล ลา/อบรม/ลงพื้นที่ (ถ้ามี)
                 if(i.leaveCheckbox==='Yes'||i.trainingCheckbox==='Yes'||i.fieldworkCheckbox==='Yes') {
-                    contentHtml += `<div class="bg-white/60 rounded-xl p-3 space-y-3 mt-3">`;
-                    if(i.leaveCheckbox==='Yes')   contentHtml += renderLeaveBlock(i, ds);
-                    if(i.trainingCheckbox==='Yes') contentHtml += renderTrainingBlock(i, ds);
-                    if(i.fieldworkCheckbox==='Yes')contentHtml += renderFieldworkBlock(i, ds);
-                    contentHtml += `</div>`;
+                    const extraCard = document.createElement('div');
+                    extraCard.className = "p-6 rounded-2xl shadow-sm border border-green-200 bg-green-50 mb-4";
+                    let extraHtml = `<div class="flex justify-between items-center mb-3 border-b border-green-200 pb-3">
+                        <span class="bg-success text-white text-xs px-3 py-1 rounded-lg font-bold shadow-sm">✅ บันทึกแล้ว — ข้อมูลเพิ่มเติม</span>
+                        <div class="flex gap-2">
+                            <button onclick="editSubmittedLog(${logIdx}, '${ds}', true)" class="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg border transition" style="color:#4DA866;background:white;border-color:rgba(77,168,102,0.2);" onmouseover="this.style.background='#4DA866';this.style.color='white';this.style.borderColor='#4DA866';" onmouseout="this.style.background='white';this.style.color='#4DA866';this.style.borderColor='rgba(77,168,102,0.2)';"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>แก้ไข</button>
+                            <button onclick="confirmDeleteLog('${i.id}', '${ds}')" class="flex items-center gap-1 text-red-400 hover:text-red-600 hover:bg-red-50 text-xs font-bold px-3 py-1.5 bg-white/50 rounded-lg border border-red-100 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>ลบรายการ</button>
+                        </div>
+                    </div><div class="bg-white/60 rounded-xl p-3 space-y-3">`;
+                    if(i.leaveCheckbox==='Yes')   extraHtml += renderLeaveBlock(i, ds);
+                    if(i.trainingCheckbox==='Yes') extraHtml += renderTrainingBlock(i, ds);
+                    if(i.fieldworkCheckbox==='Yes')extraHtml += renderFieldworkBlock(i, ds);
+                    extraHtml += '</div>';
+                    extraCard.innerHTML = extraHtml;
+                    container.appendChild(extraCard);
                 }
-                if(i.notes && i.tasks && i.tasks.length > 0) contentHtml += `<div class="mt-3 text-sm text-gray-500 bg-gray-50 p-2 rounded-lg border border-gray-100 italic">📝 ${i.notes}</div>`;
-                d.innerHTML = headerHtml + contentHtml; container.appendChild(d);
+                if (i.notes && i.tasks && i.tasks.length > 0) {
+                    const notesCard = document.createElement('div');
+                    notesCard.className = "text-sm text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 italic mb-4";
+                    notesCard.textContent = '📝 ' + i.notes;
+                    container.appendChild(notesCard);
+                }
             });
         }
 
@@ -4857,6 +4893,53 @@ button[onclick="saveDraft()"] { border-color: var(--border) !important; color: v
             hideModal('historyModal');
             openEditLogModal(logToEdit, ds, taskIdx);
         }
+        async function deleteSingleSubmittedTask(logIdx, ds, tIdx) {
+            const log = (window._currentDayLogs && window._currentDayLogs[logIdx]) ? window._currentDayLogs[logIdx] : null;
+            if (!log || !log.tasks || !log.tasks[tIdx]) { showMessage('ไม่พบรายการที่ต้องการลบ', 'error'); return; }
+            const taskNum = tIdx + 1;
+            const ok = await showConfirm({title:'ลบรายการ', message:`คุณต้องการลบรายการที่ ${taskNum} ออกจากบันทึกวันที่ ${ds} ใช่หรือไม่?`, type:'danger', okText:'ลบรายการ'});
+            if (!ok) return;
+
+            const remainingTasks = log.tasks.filter((_, i) => i !== tIdx);
+            const hasSpecial = log.leaveCheckbox==='Yes'||log.trainingCheckbox==='Yes'||log.fieldworkCheckbox==='Yes';
+
+            // ถ้าไม่เหลือ task และไม่มีข้อมูลลา/อบรม/ลงพื้นที่ → ลบทั้งรายการ
+            if (remainingTasks.length === 0 && !hasSpecial) {
+                await confirmDeleteLog(log.id, ds);
+                return;
+            }
+
+            toggleLoading(true, 'กำลังลบรายการ...');
+            try {
+                const payload = Object.assign({}, log, {
+                    tasks: remainingTasks,
+                    action: 'editLog',
+                    oldId: log.id,
+                    originalDate: ds,
+                    isDraft: false
+                });
+                const result = await safeFetchJson(WEBHOOK_URL, {method:'POST', body:JSON.stringify(payload)});
+                if (result.result !== 'success') throw new Error(result.message || 'Server Error');
+                const newId = result.id || ('local_' + Date.now());
+                if (!window._recentlyDeletedIds) window._recentlyDeletedIds = new Set();
+                window._recentlyDeletedIds.add(log.id);
+                window._recentlyDeletedIds.add(String(log.id));
+                SERVER_HISTORY_DB = SERVER_HISTORY_DB.filter(x => String(x.id) !== String(log.id));
+                const updatedLog = Object.assign({}, log, { tasks: remainingTasks, id: newId });
+                SERVER_HISTORY_DB.push(updatedLog);
+                window._pendingOptimisticRecord = updatedLog;
+                window._pendingOptimisticId = newId;
+                if(IS_ADMIN){renderAdminCalendar();renderAdminMonthlyLogs();}else{renderCalendar();}
+                renderDayLogs(ds);
+                toggleLoading(false);
+                showMessage('ลบรายการเรียบร้อยแล้ว', 'success');
+                fetchHistoryFromServer(true);
+            } catch(e) {
+                toggleLoading(false);
+                showMessage('เกิดข้อผิดพลาดในการลบ: ' + e.message, 'error');
+            }
+        }   
+
         function editSubmittedLog(logIdOrIdx, ds, useIndex) {
             let logToEdit = null;
             if (useIndex && window._currentDayLogs && window._currentDayLogs[logIdOrIdx]) {
